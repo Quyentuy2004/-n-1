@@ -1,0 +1,21 @@
+body {
+  background-image: url(./shifaaz-shamoon-qtbV_8P_Ksk-unsplash.jpg);
+  background-size: cover;
+  background-position: bottom;
+}
+.box0 {
+  background: black;
+  display: block;
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  font-size: 20px;
+  cursor: pointer;
+}
+.box0 a {
+  padding: 20px;
+  color: aqua;
+  text-decoration: none;
+  display: inline-block;
+}

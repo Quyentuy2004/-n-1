@@ -1,0 +1,65 @@
+body {
+  background-image: url(./shifaaz-shamoon-qtbV_8P_Ksk-unsplash.jpg);
+  background-size: cover;
+  background-position: bottom;
+}
+.box0 {
+  background: black;
+  display: block;
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  font-size: 20px;
+  cursor: pointer;
+}
+.trang:hover {
+  color: rgb(225, 255, 0); /* Khi di chuột vào, chữ chuyển thành xanh */
+}
+.box0 a {
+  padding: 20px;
+  color: aqua;
+  text-decoration: none;
+  display: inline-block;
+}
+.box {
+  width: 250px;
+  height: 330px;
+  background: rgba(255, 255, 255, 0.433);
+  backdrop-filter: blur(5px);
+  margin: 200px auto;
+  border-radius: 10%;
+}
+
+.box1 {
+  position: relative;
+  top: 25px;
+  margin: 30px;
+ font-size: 50px;
+}
+.ssid {
+  height: 30px;
+  width: auto;
+  font-size: 30px;
+  margin: 10px auto;
+}
+.Nhap {
+  font-size: 20px;
+  position: relative;
+  left: 5px;
+  top: 10px;
+}
+.Button {
+  position: relative;
+  top: 30px;
+  left: 80px;
+  font-size: 20px;
+  background-color: aqua;
+  border-radius: 10%;
+  cursor: pointer;
+}
+.Nhap1,
+.Nhap2 {
+  width: 230px;
+  height: 25px;
+}
