@@ -1,23 +1,29 @@
 #include <EEPROM.h> //Tên wifi và mật khẩu lưu vào ô nhớ 0->96
 #include <ArduinoJson.h>
+#include "DHT.h"
 #include <WiFi.h>
 #include <WebServer.h> //Thêm thư viện web server
 WebServer webServer(80); //Khởi tạo đối tượng webServer port 80
 #include <Ticker.h>
-Ticker blinker;
 
+Ticker blinker;
 String ssid;
 String password;
+#define DHTPIN 4 
+#define DHTTYPE DHT11 
 #define ledPin 2
 #define btnPin 0
 unsigned long lastTimePress = millis();
 #define PUSHTIME 5000
-int wifiMode; // 0: Chế độ cấu hình, 1: Chế độ kết nối, 2: Mất wifi
+DHT dht(DHTPIN, DHTTYPE);
+int wifiMode; // 0: Chế độ cấu hình web , 1: Chế độ kết nối, 2: Mất wifi
 unsigned long blinkTime = millis();
+
+//Tạo biến chứa mã nguồn trang web HTML để hiển thị trình hiển thị thông số Nhiệt độ và Độ ẩm 
 const char html1[] PROGMEM = R"html(
-<!DOCTYPE html>
-<html lang="vi">
-<head>
+  <!DOCTYPE html>
+  <html lang="vi">
+  <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESP32 IoT - Giám sát Nhiệt độ và Độ ẩm</title>
@@ -126,8 +132,8 @@ const char html1[] PROGMEM = R"html(
             font-size: 14px;
         }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
         <h1>ESP32 IoT - Giám sát Nhiệt độ và Độ ẩm</h1>
         
@@ -135,13 +141,13 @@ const char html1[] PROGMEM = R"html(
             <div class="card">
                 <div class="sensor-icon">🌡️</div>
                 <div class="card-title">Nhiệt độ</div>
-                <div class="reading temperature" id="temperature">26.5<span class="unit">°C</span></div>
+                <div class="reading temperature" id="temperature">%TEMP%<span class="unit">°C</span></div>
             </div>
             
             <div class="card">
                 <div class="sensor-icon">💧</div>
                 <div class="card-title">Độ ẩm</div>
-                <div class="reading humidity" id="humidity">68.2<span class="unit">%</span></div>
+                <div class="reading humidity" id="humidity">%HUMI%<span class="unit">%</span></div>
             </div>
         </div>
         
@@ -155,7 +161,7 @@ const char html1[] PROGMEM = R"html(
                 <p>Dự án này sử dụng ESP32 để tạo một thiết bị IoT đo nhiệt độ và độ ẩm. Thiết bị có các tính năng:</p>
                 <ul>
                     <li>Cấu hình WiFi qua giao diện web</li>
-                    <li>Đo nhiệt độ và độ ẩm sử dụng cảm biến DHT22/DHT11</li>
+                    <li>Đo nhiệt độ và độ ẩm sử dụng cảm biến DHT11</li>
                     <li>Hiển thị dữ liệu theo thời gian thực trên trang web</li>
                     <li>Lưu thông tin WiFi vào EEPROM để duy trì kết nối sau khi khởi động lại</li>
                     <li>LED trạng thái cho biết chế độ hoạt động của thiết bị</li>
@@ -167,19 +173,19 @@ const char html1[] PROGMEM = R"html(
             <h2>Chức năng chính</h2>
             <div class="code-section">
                 <pre><code>
-// Chế độ Access Point
-- Khi khởi động lần đầu, ESP32 sẽ tạo một AP có tên "ESP32-xx"
-- Kết nối đến AP này để cấu hình Wi-Fi nhà bạn
-- Truy cập 192.168.4.1 để nhập SSID và mật khẩu Wi-Fi
+  // Chế độ Access Point
+  - Khi khởi động lần đầu, ESP32 sẽ tạo một AP có tên "ESP32-xx"
+  - Kết nối đến AP này để cấu hình Wi-Fi nhà bạn
+  - Truy cập 192.168.4.1 để nhập SSID và mật khẩu Wi-Fi
 
-// Chế độ đo và hiển thị dữ liệu
-- Sau khi kết nối Wi-Fi thành công, ESP32 bắt đầu đọc cảm biến
-- Dữ liệu nhiệt độ và độ ẩm được cập nhật mỗi 2 giây
-- Truy cập IP của ESP32 trên cổng 81 để xem dữ liệu
+  // Chế độ đo và hiển thị dữ liệu
+  - Sau khi kết nối Wi-Fi thành công, ESP32 bắt đầu đọc cảm biến
+  - Dữ liệu nhiệt độ và độ ẩm được cập nhật mỗi 2 giây
+  - Truy cập IP của ESP32  để xem dữ liệu
 
-// Khôi phục cài đặt
-- Nhấn giữ nút RESET trong 5 giây để xóa thông tin Wi-Fi
-- Thiết bị sẽ khởi động lại ở chế độ Access Point
+  // Khôi phục cài đặt
+  - Nhấn giữ nút RESET trong 5 giây để xóa thông tin Wi-Fi
+  - Thiết bị sẽ khởi động lại ở chế độ Access Point
                 </code></pre>
             </div>
         </div>
@@ -190,29 +196,34 @@ const char html1[] PROGMEM = R"html(
     </div>
     
     <script>
-        // Mô phỏng dữ liệu cho demo
-        function simulateData() {
-            const tempBase = 25 + (Math.random() * 6) - 3;  // 22-28°C
-            const humBase = 65 + (Math.random() * 15) - 5;  // 60-75%
-            
-            document.getElementById('temperature').innerHTML = 
-                tempBase.toFixed(1) + '<span class="unit">°C</span>';
-            document.getElementById('humidity').innerHTML = 
-                humBase.toFixed(1) + '<span class="unit">%</span>';
-        }
-        
-        // Cập nhật dữ liệu mỗi 5 giây
-        setInterval(simulateData, 5000);
-        
-        // Khởi tạo dữ liệu ban đầu sau khi trang tải xong
-        document.addEventListener('DOMContentLoaded', simulateData);
+    // Hàm setInterval() là hàm lặp lại trong 1 chu kỳ thời gian
+      setInterval(function ( ) {
+        var xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function() {
+            if (xhttp.readyState == 4 && xhttp.status == 200) {
+              document.getElementById("temperature").innerHTML = xhttp.responseText + "<span class='unit'>°C</span>";
+            }
+        };
+        xhttp.open("GET", "/temperature", true);
+        xhttp.send();
+      },2000 ) ;
+
+      setInterval(function ( ) {
+        var xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function() {
+          if (xhttp.readyState == 4 && xhttp.status == 200) {
+           document.getElementById("humidity").innerHTML = xhttp.responseText + "<span class='unit'>%</span>";
+          }
+        };
+        xhttp.open("GET", "/humidity", true);
+        xhttp.send();
+      }, 2000) ;
     </script>
-</body>
-</html>
-
-
+ </body>
+ </html>
 )html";
-//Tạo biến chứa mã nguồn trang web HTML để hiển thị trên trình duyệt
+
+//Tạo biến chứa mã nguồn trang web HTML để hiển thị trình duyệt kết nối wifi bằng chế độ AP
 const char html[] PROGMEM = R"html( 
   <!DOCTYPE html>
     <html>
@@ -254,12 +265,12 @@ const char html[] PROGMEM = R"html(
                 console.log ("qua buoc 1");
                 if (xhttp.status == 200) {
                   console.log("Thành công buoc 2:", xhttp.responseText);
-                  data = xhttp.responseText;
+                  data = xhttp.responseText; //xhttp.responseText chứa danh sách SSID dưới dạng chuỗi JSON.
                   document.getElementById("info").innerHTML = "WiFi scan completed!";
-                  var obj = JSON.parse(data);
+                  var obj = JSON.parse(data);       //Chuyển đổi JSON thành object với JSON.parse(data).  
                   var select = document.getElementById("ssid");
                   for(var i=0; i<obj.length;++i){
-                   select[select.length] = new Option(obj[i],obj[i]);
+                   select[select.length] = new Option(obj[i],obj[i]);//
             
                   }
                 }
@@ -275,6 +286,7 @@ const char html[] PROGMEM = R"html(
             xhttp.open("GET","/scanWifi",true);
             xhttp.send();
           }
+      
           function saveWifi(){
             ssid = document.getElementById("ssid").value;
             pass = document.getElementById("password").value;
@@ -290,8 +302,7 @@ const char html[] PROGMEM = R"html(
           function reStart(){
             xhttp.onreadystatechange = function(){
               if(xhttp.readyState==4&&xhttp.status==200){
-                data = xhttp.responseText;
-                alert(data);
+                document.getElementById("info").innerHTML = "Scanning wifi network...!";
               }
             }
             xhttp.open("GET","/reStart",true);
@@ -301,9 +312,7 @@ const char html[] PROGMEM = R"html(
     </body>
   </html>
 )html";
-void handleRoot() {
-    webServer.send(200, "text/html", "<h1>Xin chào! Đây là ESP32 Web Server</h1>");
-}
+
 void scanWiFiNetworks() {
   Serial.println("Scanning WiFi...");
   int numNetworks = WiFi.scanNetworks();
@@ -316,6 +325,7 @@ void scanWiFiNetworks() {
   Serial.println(json);
   webServer.send(200, "application/json", json);
 }
+
 void blinkLed(uint32_t t){
   if(millis()-blinkTime>t){
     digitalWrite(ledPin,!digitalRead(ledPin));
@@ -340,19 +350,23 @@ void ledControl(){
     }
   }
 }
+
 void WiFiEvent(WiFiEvent_t event) {
-            Serial.print("Event:");
-             Serial.println(event);
+    Serial.print("Event:");
+    Serial.println(event);
 
     switch (event) {
         case ARDUINO_EVENT_WIFI_STA_CONNECTED:
             Serial.println("WiFi connected!");
             break;
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+            
+            if (digitalRead(btnPin)!=LOW){
             Serial.println("WiFi lost connection.");
             wifiMode=2;
             delay(5000);
-      WiFi.begin(ssid, password);
+            WiFi.begin(ssid, password);
+            }
             break;
         case ARDUINO_EVENT_WIFI_STA_GOT_IP:
             Serial.print("IP Address: ");
@@ -399,10 +413,49 @@ void setupWifi(){
   }
 }
 
+String readDHTTemperature(){
+  // Sensor DHT doc du lieu cham 2s 1 lan nen doc nhanh < 2s co the la lay gia tri cu 
+  // tra ve nhiet do C
+  float t = dht.readTemperature();
+  
+  if (isnan(t))
+  {
+    Serial.println("Failed to read from DHT sensor!");
+    return "--";
+  }
+  else
+  {
+      return String(t);
+  }
+}
+
+String readDHTHumidity(){
+  // doc do am theo %
+  float h = dht.readHumidity();
+  if (isnan(h))
+  {
+    Serial.println("Failed to read from DHT sensor!");
+    return "--";
+  }
+  else
+  {
+    return String(h);
+  }
+}
+
+
+
 void setupWebServer(){
   if (WiFi.status() == WL_CONNECTED) {  
         webServer.on("/",[]{
     webServer.send(200, "text/html", html1);
+    webServer.on("/temperature", HTTP_GET, []
+            { webServer.send(200, "text/plain", readDHTTemperature().c_str()); }
+            );
+    webServer.on("/humidity", HTTP_GET, []
+            { webServer.send(200, "text/plain", readDHTHumidity().c_str());
+             });
+
   });
         delay(2000);
         Serial.println("Web server started");
@@ -412,7 +465,7 @@ void setupWebServer(){
     webServer.send(200, "text/html", html);
   });
   webServer.on("/scanWifi", scanWiFiNetworks);
-  
+  //webServer.on("/reStart", scanWiFiNetworks);
   webServer.on("/saveWifi", []() { 
    if (webServer.hasArg("ssid") && webServer.hasArg("pass")) {
     ssid = webServer.arg("ssid");
@@ -465,3 +518,21 @@ public:
     if(wifiMode==0)webServer.handleClient();
   }
 } wifiConfig;
+
+class DHTConfig{
+public:
+  void begin(){
+    dht.begin();
+  }
+   void run(){
+    String h= readDHTHumidity();
+    String t= readDHTTemperature();
+    Serial.print(F("Humidity: "));
+    Serial.print(h);
+    Serial.print(F("%  Temperature: "));
+    Serial.print(t);
+    Serial.print(F("°C ")); 
+    
+    delay(2000);
+  }
+} dhtConfig;
